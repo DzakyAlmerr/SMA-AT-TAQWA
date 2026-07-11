@@ -2658,6 +2658,7 @@
       toast.classList.add('hidden');
     }, 3000);
   }
+  window.showToast = showToast;
 
   function showLoading() {
     document.getElementById('loading-overlay').classList.remove('hidden');
