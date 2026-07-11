@@ -1,101 +1,182 @@
+// 🔐 AUTH ROUTES: Authentication endpoints
+// 📝 Handles user login, registration, and token management
 
-const { 
-    schedulesController, 
-    announcementsController, 
-    holidaysController, 
-    assetsController 
-} = require('../controllers/genericController');
-const attendanceController = require('../controllers/attendanceController');
+const express = require('express');
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { Pool } = require('pg');
 
-// ─── Attendance ────────────────────────────────────────────────────────────
-router.post('/attendance', authenticateToken, async (req, res) => {
+// PostgreSQL database connection
+const poolConfig = process.env.DATABASE_URL 
+    ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+    : {
+        user: process.env.DB_USER || 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'smart_school',
+        password: process.env.DB_PASSWORD || 'password',
+        port: process.env.DB_PORT || 5432,
+    };
+const pool = new Pool(poolConfig);
+
+// JWT configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_EXPIRE = process.env.JWT_EXPIRE || '24h';
+
+// User login endpoint
+router.post('/login', async (req, res) => {
     try {
-        const result = await attendanceController.submitAttendance(req.user.userId, req.user.role, req.body);
-        const status = result.success ? 200 : 400;
-        res.status(status).json(result);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        const { username, password, role } = req.body;
+        
+        if (!username || !password || !role) {
+            return res.status(400).json({
+                success: false,
+                error: 'Username, password, and role are required'
+            });
+        }
+        
+        // Find user by username (case-insensitive)
+        const result = await pool.query(
+            'SELECT * FROM users WHERE username ILIKE $1 AND role = $2',
+            [username.trim(), role]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid credentials'
+            });
+        }
+        
+        const user = result.rows[0];
+        
+        // Verify password
+        const validPassword = await bcrypt.compare(password, user.password_hash);
+        
+        if (!validPassword) {
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid credentials'
+            });
+        }
+        
+        // Fetch actual name from related tables
+        let name = user.username;
+        let email = '';
+        if (user.role === 'Teacher') {
+            const teacherRes = await pool.query('SELECT name, email FROM teachers WHERE teacher_id = $1', [user.user_id]);
+            if (teacherRes.rows.length > 0) {
+                name = teacherRes.rows[0].name;
+                email = teacherRes.rows[0].email;
+            }
+        } else if (user.role === 'Student') {
+            const studentRes = await pool.query('SELECT name, email FROM students WHERE student_id = $1', [user.user_id]);
+            if (studentRes.rows.length > 0) {
+                name = studentRes.rows[0].name;
+                email = studentRes.rows[0].email;
+            }
+        }
+        
+        // Generate JWT token
+        const token = jwt.sign(
+            {
+                userId: user.user_id,
+                username: user.username,
+                role: user.role,
+                relatedId: user.related_id
+            },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRE }
+        );
+        
+        // Return user info and token
+        res.json({
+            success: true,
+            data: {
+                token,
+                user: {
+                    userId: user.user_id,
+                    username: user.username,
+                    role: user.role,
+                    name: name,
+                    email: email
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
     }
 });
 
-router.get('/attendance', authenticateToken, async (req, res) => {
+// User registration endpoint
+router.post('/register', async (req, res) => {
     try {
-        const result = await attendanceController.getAttendanceByDate(req.query.date);
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// ─── Generic CRUD Helper ──────────────────────────────────────────────────
-const addCrudRoutes = (path, controller) => {
-    router.get(path, async (req, res) => {
-        try {
-            const result = await controller.getAll();
-            res.json(result);
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+        const { username, password, role, name, email, relatedId } = req.body;
+        
+        if (!username || !password || !role) {
+            return res.status(400).json({
+                success: false,
+                error: 'Username, password, and role are required'
+            });
         }
-    });
-
-    router.post(path, async (req, res) => {
-        try {
-            const result = await controller.create(req.body);
-            res.json(result);
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
+        
+        // Hash password
+        const saltRounds = 12;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+        
+        // Check if username already exists
+        const existingUser = await pool.query(
+            'SELECT user_id FROM users WHERE username = $1',
+            [username]
+        );
+        
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: 'Username already exists'
+            });
         }
-    });
-
-    router.put(`${path}/:id`, async (req, res) => {
-        try {
-            const result = await controller.update(req.params.id, req.body);
-            res.json(result);
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
-        }
-    });
-
-    router.delete(`${path}/:id`, async (req, res) => {
-        try {
-            const result = await controller.delete(req.params.id);
-            res.json(result);
-        } catch (err) {
-            res.status(500).json({ success: false, error: err.message });
-        }
-    });
-};
-
-addCrudRoutes('/schedule', schedulesController);
-addCrudRoutes('/announcements', announcementsController);
-addCrudRoutes('/holidays', holidaysController);
-addCrudRoutes('/assets', assetsController);
-
-// Add missing PUT routes for existing entities
-router.put('/students/:id', async (req, res) => {
-    try {
-        const result = await studentController.update(req.params.id, req.body);
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-router.put('/teachers/:id', async (req, res) => {
-    try {
-        const result = await studentController.query('UPDATE teachers SET name=$1, email=$2, phone=$3 WHERE teacher_id=$4 RETURNING *', [req.body.name, req.body.email, req.body.phone, req.params.id]);
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-router.put('/classes/:id', async (req, res) => {
-    try {
-        const result = await studentController.query('UPDATE classes SET name=$1, grade=$2 WHERE class_id=$3 RETURNING *', [req.body.name || req.body.className, req.body.grade || req.body.gradeLevel, req.params.id]);
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        
+        // Create new user
+        const result = await pool.query(
+            `INSERT INTO users (username, password_hash, role, name, email, related_id)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING user_id, username, role, name, email, related_id`,
+            [username, passwordHash, role, name, email, relatedId]
+        );
+        
+        // Generate JWT token
+        const token = jwt.sign(
+            {
+                userId: result.rows[0].user_id,
+                username: result.rows[0].username,
+                role: result.rows[0].role,
+                relatedId: result.rows[0].related_id
+            },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRE }
+        );
+        
+        res.status(201).json({
+            success: true,
+            data: {
+                token,
+                user: result.rows[0]
+            },
+            message: 'User registered successfully'
+        });
+        
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
     }
 });
 
