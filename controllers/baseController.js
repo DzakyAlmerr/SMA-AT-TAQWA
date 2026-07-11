@@ -77,6 +77,8 @@ class BaseController {
             classes:      'class_id',
             users:        'user_id',
             materials:    'material_id',
+            schedules:    'schedule_id',
+            assets:       'asset_id'
         };
         return idMap[this.model] || 'id';
     }
