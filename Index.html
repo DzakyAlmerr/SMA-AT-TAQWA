@@ -6907,6 +6907,8 @@
   </div>
 
 
+  
+  
   <!-- Express API Fallback Adapter -->
   <script>
     if (typeof google === 'undefined') {
@@ -6916,85 +6918,109 @@
             return {
               _successHandler: null,
               _failureHandler: null,
-              withSuccessHandler: function (handler) { this._successHandler = handler; return this; },
-              withFailureHandler: function (handler) { this._failureHandler = handler; return this; },
-
-              _fetch: function (method, url, data) {
+              withSuccessHandler: function(handler) { this._successHandler = handler; return this; },
+              withFailureHandler: function(handler) { this._failureHandler = handler; return this; },
+              
+              _fetch: function(method, url, data) {
                 const headers = { 'Content-Type': 'application/json' };
                 const userStr = localStorage.getItem('currentUser');
                 if (userStr) {
                   try {
                     const user = JSON.parse(userStr);
                     if (user.token) headers['Authorization'] = 'Bearer ' + user.token;
-                  } catch (e) { }
+                  } catch(e){}
                 }
-
+                
                 fetch(url, {
                   method: method,
                   headers: headers,
                   body: data ? JSON.stringify(data) : undefined
                 })
-                  .then(async res => {
-                    const contentType = res.headers.get('content-type');
-                    let json = {};
-                    if (contentType && contentType.includes('application/json')) {
-                      json = await res.json().catch(() => ({}));
-                    }
-                    if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
-                    return json;
-                  })
-                  .then(data => {
-                    // Fix nested 'data' from Express response to match legacy GAS response structure
-                    if (data && data.data && data.data.user) {
-                      data.user = data.data.user;
-                      data.token = data.data.token;
-                    }
-                    if (data && data.token && data.user) {
-                      data.user.token = data.token;
-                    }
-                    if (this._successHandler) this._successHandler(data);
-                  })
-                  .catch(err => { if (this._failureHandler) this._failureHandler(err); });
+                .then(async res => {
+                  const contentType = res.headers.get('content-type');
+                  let json = {};
+                  if (contentType && contentType.includes('application/json')) {
+                    json = await res.json().catch(() => ({}));
+                  }
+                  if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
+                  return json;
+                })
+                .then(data => { if (this._successHandler) this._successHandler(data); })
+                .catch(err => { if (this._failureHandler) this._failureHandler(err); });
               },
 
               // Auth
-              apiLogin: function (username, password, role) { this._fetch('POST', '/api/auth/login', { username, password, role }); },
-
+              apiLogin: function(username, password, role) { this._fetch('POST', '/api/auth/login', {username, password, role}); },
+              
               // Materials
-              apiGetMaterials: function () { this._fetch('GET', '/api/material'); },
-              apiAddMaterial: function (data) { this._fetch('POST', '/api/material', data); },
-              apiUpdateMaterial: function (id, data) { this._fetch('PUT', '/api/material/' + id, data); },
-              apiDeleteMaterial: function (id) { this._fetch('DELETE', '/api/material/' + id); },
-
+              apiGetMaterials: function() { this._fetch('GET', '/api/material'); },
+              apiAddMaterial: function(data) { this._fetch('POST', '/api/material', data); },
+              apiUpdateMaterial: function(id, data) { this._fetch('PUT', '/api/material/' + id, data); },
+              apiDeleteMaterial: function(id) { this._fetch('DELETE', '/api/material/' + id); },
+              
               // Quizzes
-              apiGetQuizzes: function () { this._fetch('GET', '/api/quiz'); },
-              apiAddQuiz: function (data) { this._fetch('POST', '/api/quiz', data); },
-              apiUpdateQuiz: function (id, data) { this._fetch('PUT', '/api/quiz/' + id, data); },
-              apiDeleteQuiz: function (id) { this._fetch('DELETE', '/api/quiz/' + id); },
-              apiSubmitQuizResult: function (data) { this._fetch('POST', '/api/student/quizzes/' + (data.quiz_id || data.quizId || data.id) + '/submit', data); },
-              apiGetQuizResults: function () { this._fetch('GET', '/api/student/results'); },
+              apiGetQuizzes: function() { this._fetch('GET', '/api/quiz'); },
+              apiAddQuiz: function(data) { this._fetch('POST', '/api/quiz', data); },
+              apiUpdateQuiz: function(id, data) { this._fetch('PUT', '/api/quiz/' + id, data); },
+              apiDeleteQuiz: function(id) { this._fetch('DELETE', '/api/quiz/' + id); },
+              apiSubmitQuizResult: function(data) { this._fetch('POST', '/api/student/quizzes/' + (data.quiz_id || data.quizId || data.id) + '/submit', data); },
+              apiGetQuizResults: function() { this._fetch('GET', '/api/student/results'); },
+              
+              // Attendance
+              apiSubmitAttendance: function(data) { this._fetch('POST', '/api/attendance', data); },
+              apiGetAttendance: function(date) { this._fetch('GET', '/api/attendance?date=' + date); },
+              
+              // Students
+              apiGetStudents: function() { this._fetch('GET', '/api/students'); },
+              apiAddStudent: function(data) { this._fetch('POST', '/api/students', data); },
+              apiUpdateStudent: function(id, data) { this._fetch('PUT', '/api/students/' + id, data); },
+              apiDeleteStudent: function(id) { this._fetch('DELETE', '/api/students/' + id); },
+              
+              // Teachers
+              apiGetTeachers: function() { this._fetch('GET', '/api/teachers'); },
+              apiAddTeacher: function(data) { this._fetch('POST', '/api/teachers', data); },
+              apiUpdateTeacher: function(id, data) { this._fetch('PUT', '/api/teachers/' + id, data); },
+              apiDeleteTeacher: function(id) { this._fetch('DELETE', '/api/teachers/' + id); },
+              
+              // Classes
+              apiGetClasses: function() { this._fetch('GET', '/api/classes'); },
+              apiAddClass: function(data) { this._fetch('POST', '/api/classes', data); },
+              apiUpdateClass: function(id, data) { this._fetch('PUT', '/api/classes/' + id, data); },
+              apiDeleteClass: function(id) { this._fetch('DELETE', '/api/classes/' + id); },
 
-              // Generic fallbacks for other endpoints
-              apiGetStudents: function () { this._fetch('GET', '/api/students'); },
-              apiAddStudent: function (data) { this._fetch('POST', '/api/students', data); },
-              apiDeleteStudent: function (id) { this._fetch('DELETE', '/api/students/' + id); },
-              apiGetTeachers: function () { this._fetch('GET', '/api/teachers'); },
-              apiAddTeacher: function (data) { this._fetch('POST', '/api/teachers', data); },
-              apiDeleteTeacher: function (id) { this._fetch('DELETE', '/api/teachers/' + id); },
-              apiGetClasses: function () { this._fetch('GET', '/api/classes'); },
-              apiAddClass: function (data) { this._fetch('POST', '/api/classes', data); },
-              apiDeleteClass: function (id) { this._fetch('DELETE', '/api/classes/' + id); },
-              apiGetSchedules: function () { this._fetch('GET', '/api/schedule'); },
-
-              // Stubs for unsupported ones so it doesn't crash
-              apiGetHolidays: function () { this._successHandler({ success: true, data: [] }); },
-              apiChangePassword: function () { this._successHandler({ success: true }); }
+              // Schedules
+              apiGetSchedules: function() { this._fetch('GET', '/api/schedule'); },
+              apiAddSchedule: function(data) { this._fetch('POST', '/api/schedule', data); },
+              apiUpdateSchedule: function(id, data) { this._fetch('PUT', '/api/schedule/' + id, data); },
+              apiDeleteSchedule: function(id) { this._fetch('DELETE', '/api/schedule/' + id); },
+              
+              // Announcements
+              apiGetAnnouncements: function() { this._fetch('GET', '/api/announcements'); },
+              apiAddAnnouncement: function(data) { this._fetch('POST', '/api/announcements', data); },
+              apiUpdateAnnouncement: function(id, data) { this._fetch('PUT', '/api/announcements/' + id, data); },
+              apiDeleteAnnouncement: function(id) { this._fetch('DELETE', '/api/announcements/' + id); },
+              
+              // Holidays
+              apiGetHolidays: function() { this._fetch('GET', '/api/holidays'); },
+              apiAddHoliday: function(data) { this._fetch('POST', '/api/holidays', data); },
+              apiUpdateHoliday: function(id, data) { this._fetch('PUT', '/api/holidays/' + id, data); },
+              apiDeleteHoliday: function(id) { this._fetch('DELETE', '/api/holidays/' + id); },
+              
+              // Assets
+              apiGetAssets: function() { this._fetch('GET', '/api/assets'); },
+              apiAddAsset: function(data) { this._fetch('POST', '/api/assets', data); },
+              apiUpdateAsset: function(id, data) { this._fetch('PUT', '/api/assets/' + id, data); },
+              apiDeleteAsset: function(id) { this._fetch('DELETE', '/api/assets/' + id); },
+              
+              // Password
+              apiChangePassword: function() { this._successHandler({success:true}); }
             };
           }
         }
       };
     }
   </script>
+
   <!-- Backend API for Apps Script -->
   <script>
     const API = {
