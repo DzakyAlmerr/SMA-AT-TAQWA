@@ -7,7 +7,6 @@ class AttendanceController extends BaseController {
     }
 
     async submitAttendance(userId, role, attendanceData) {
-        // Find if already exists for today
         const today = new Date().toISOString().split('T')[0];
         
         const existing = await this.query(
@@ -35,8 +34,6 @@ class AttendanceController extends BaseController {
     }
 
     async getAttendanceByDate(date) {
-        // Convert date DD MMM YYYY if needed, but for simplicity we fetch all and let frontend filter
-        // Or if the frontend passes the formatted date, we just query by date string or return all recent
         return await this.query('SELECT * FROM attendance ORDER BY created_at DESC LIMIT 1000');
     }
 }
